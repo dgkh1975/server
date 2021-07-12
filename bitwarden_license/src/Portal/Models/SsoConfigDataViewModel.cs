@@ -2,10 +2,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Collections.Generic;
 using Bit.Core.Services;
-using Bit.Core;
 using Bit.Core.Models.Data;
 using Bit.Core.Enums;
 using Bit.Core.Sso;
+using Bit.Core.Settings;
 using U2F.Core.Utils;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -49,6 +49,12 @@ namespace Bit.Portal.Models
             SpWantAssertionsSigned = configurationData.SpWantAssertionsSigned;
             SpValidateCertificates = configurationData.SpValidateCertificates;
             SpMinIncomingSigningAlgorithm = configurationData.SpMinIncomingSigningAlgorithm ?? SamlSigningAlgorithms.Sha256;
+            AdditionalScopes = configurationData.AdditionalScopes;
+            AdditionalUserIdClaimTypes = configurationData.AdditionalUserIdClaimTypes;
+            AdditionalEmailClaimTypes = configurationData.AdditionalEmailClaimTypes;
+            AdditionalNameClaimTypes = configurationData.AdditionalNameClaimTypes;
+            AcrValues = configurationData.AcrValues;
+            ExpectedReturnAcrValue = configurationData.ExpectedReturnAcrValue;
         }
 
         [Required]
@@ -72,6 +78,18 @@ namespace Bit.Portal.Models
         public OpenIdConnectRedirectBehavior RedirectBehavior { get; set; }
         [Display(Name = "GetClaimsFromUserInfoEndpoint")]
         public bool GetClaimsFromUserInfoEndpoint { get; set; }
+        [Display(Name = "AdditionalScopes")]
+        public string AdditionalScopes { get; set; }
+        [Display(Name = "AdditionalUserIdClaimTypes")]
+        public string AdditionalUserIdClaimTypes { get; set; }
+        [Display(Name = "AdditionalEmailClaimTypes")]
+        public string AdditionalEmailClaimTypes { get; set; }
+        [Display(Name = "AdditionalNameClaimTypes")]
+        public string AdditionalNameClaimTypes { get; set; }
+        [Display(Name = "AcrValues")]
+        public string AcrValues { get; set; }
+        [Display(Name = "ExpectedReturnAcrValue")]
+        public string ExpectedReturnAcrValue { get; set; }
 
         // SAML2 SP
         [Display(Name = "SpEntityId")]
@@ -218,6 +236,12 @@ namespace Bit.Portal.Models
                 SpWantAssertionsSigned = SpWantAssertionsSigned,
                 SpValidateCertificates = SpValidateCertificates,
                 SpMinIncomingSigningAlgorithm = SpMinIncomingSigningAlgorithm,
+                AdditionalScopes = AdditionalScopes,
+                AdditionalUserIdClaimTypes = AdditionalUserIdClaimTypes,
+                AdditionalEmailClaimTypes = AdditionalEmailClaimTypes,
+                AdditionalNameClaimTypes = AdditionalNameClaimTypes,
+                AcrValues = AcrValues,
+                ExpectedReturnAcrValue = ExpectedReturnAcrValue,
             };
         }
 

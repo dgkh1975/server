@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Threading.Tasks;
 using Bit.Core.Models.Table;
+using Bit.Core.Settings;
 using System.Data;
 using Dapper;
 
@@ -41,11 +42,6 @@ namespace Bit.Core.Repositories.SqlServer
                     new { UserId = userId },
                     commandType: CommandType.StoredProcedure);
             }
-        }
-
-        public override Task<U2f> GetByIdAsync(int id)
-        {
-            throw new NotSupportedException();
         }
 
         public override Task ReplaceAsync(U2f obj)

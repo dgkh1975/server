@@ -14,13 +14,19 @@ using Dapper;
 using System.Globalization;
 using System.Web;
 using Microsoft.AspNetCore.DataProtection;
+using Bit.Core.Settings;
 using Bit.Core.Enums;
+using Bit.Core.Context;
 using System.Threading.Tasks;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Blob;
 using Bit.Core.Models.Table;
 using IdentityModel;
 using System.Text.Json;
+using Bit.Core.Enums.Provider;
+using Azure.Storage.Queues;
+using Azure.Storage.Queues.Models;
+using System.Threading;
 
 namespace Bit.Core.Utilities
 {
@@ -141,6 +147,55 @@ namespace Bit.Core.Utilities
                     row[hidePasswordsColumn] = value.HidePasswords;
                     table.Rows.Add(row);
                 }
+            }
+
+            return table;
+        }
+
+        public static DataTable ToTvp(this IEnumerable<OrganizationUser> orgUsers)
+        {
+            var table = new DataTable();
+            table.SetTypeName("[dbo].[OrganizationUserType]");
+
+            var columnData = new List<(string name, Type type, Func<OrganizationUser, object> getter)>
+            {
+                (nameof(OrganizationUser.Id), typeof(Guid), ou => ou.Id),
+                (nameof(OrganizationUser.OrganizationId), typeof(Guid), ou => ou.OrganizationId),
+                (nameof(OrganizationUser.UserId), typeof(Guid), ou => ou.UserId),
+                (nameof(OrganizationUser.Email), typeof(string), ou => ou.Email),
+                (nameof(OrganizationUser.Key), typeof(string), ou => ou.Key),
+                (nameof(OrganizationUser.Status), typeof(byte), ou => ou.Status),
+                (nameof(OrganizationUser.Type), typeof(byte), ou => ou.Type),
+                (nameof(OrganizationUser.AccessAll), typeof(bool), ou => ou.AccessAll),
+                (nameof(OrganizationUser.ExternalId), typeof(string), ou => ou.ExternalId),
+                (nameof(OrganizationUser.CreationDate), typeof(DateTime), ou => ou.CreationDate),
+                (nameof(OrganizationUser.RevisionDate), typeof(DateTime), ou => ou.RevisionDate),
+                (nameof(OrganizationUser.Permissions), typeof(string), ou => ou.Permissions),
+                (nameof(OrganizationUser.ResetPasswordKey), typeof(string), ou => ou.ResetPasswordKey),
+            };
+
+            foreach (var (name, type, getter) in columnData)
+            {
+                var column = new DataColumn(name, type);
+                table.Columns.Add(column);
+            }
+
+            foreach (var orgUser in orgUsers ?? new OrganizationUser[] { })
+            {
+                var row = table.NewRow();
+                foreach (var (name, type, getter) in columnData)
+                {
+                    var val = getter(orgUser);
+                    if (val == null)
+                    {
+                        row[name] = DBNull.Value;
+                    }
+                    else
+                    {
+                        row[name] = val;
+                    }
+                }
+                table.Rows.Add(row);
             }
 
             return table;
@@ -502,9 +557,10 @@ namespace Bit.Core.Utilities
 
         public static string SanitizeForEmail(string value)
         {
-            return value.Replace("@", "[at]")
+            var cleanedValue = value.Replace("@", "[at]")
                 .Replace("http://", string.Empty)
                 .Replace("https://", string.Empty);
+            return HttpUtility.HtmlEncode(cleanedValue);
         }
 
         public static string DateTimeToTableStorageKey(DateTime? date = null)
@@ -557,7 +613,7 @@ namespace Bit.Core.Utilities
         {
             return TokenIsValid("OrganizationUserInvite", protector, token, userEmail, orgUserId, globalSettings);
         }
-        
+
         public static bool TokenIsValid(string firstTokenPart, IDataProtector protector, string token, string userEmail,
             Guid id, GlobalSettings globalSettings)
         {
@@ -685,7 +741,8 @@ namespace Bit.Core.Utilities
             return configDict;
         }
 
-        public static List<KeyValuePair<string, string>> BuildIdentityClaims(User user, ICollection<CurrentContext.CurrentContentOrganization> orgs, bool isPremium) 
+        public static List<KeyValuePair<string, string>> BuildIdentityClaims(User user, ICollection<CurrentContentOrganization> orgs,
+            ICollection<CurrentContentProvider> providers, bool isPremium)
         {
             var claims = new List<KeyValuePair<string, string>>()
             {
@@ -785,6 +842,11 @@ namespace Bit.Core.Utilities
                                 {
                                     claims.Add(new KeyValuePair<string, string>("manageusers", org.Id.ToString()));
                                 }
+                                
+                                if (org.Permissions.ManageResetPassword)
+                                {
+                                    claims.Add(new KeyValuePair<string, string>("manageresetpassword", org.Id.ToString()));
+                                }
                             }
                             break;
                         default:
@@ -792,6 +854,29 @@ namespace Bit.Core.Utilities
                     }
                 }
             }
+            
+            if (providers.Any())
+            {
+                foreach (var group in providers.GroupBy(o => o.Type))
+                {
+                    switch (group.Key)
+                    {
+                        case ProviderUserType.ProviderAdmin:
+                            foreach (var provider in group)
+                            {
+                                claims.Add(new KeyValuePair<string, string>("providerprovideradmin", provider.Id.ToString()));
+                            }
+                            break;
+                        case ProviderUserType.ServiceUser:
+                            foreach (var provider in group)
+                            {
+                                claims.Add(new KeyValuePair<string, string>("providerserviceuser", provider.Id.ToString()));
+                            }
+                            break;
+                    }
+                }
+            }
+            
             return claims;
         }
 
@@ -808,6 +893,33 @@ namespace Bit.Core.Utilities
             };
 
             return System.Text.Json.JsonSerializer.Deserialize<T>(jsonData, options);
+        }
+
+        public static ICollection<T> AddIfNotExists<T>(this ICollection<T> list, T item)
+        {
+            if (list.Contains(item))
+            {
+                return list;
+            }
+            list.Add(item);
+            return list;
+        }
+
+        public static string DecodeMessageText(this QueueMessage message)
+        {
+            var text = message?.MessageText;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+            try
+            {
+                return Base64DecodeString(text);
+            }
+            catch
+            {
+                return text;
+            }
         }
     }
 }

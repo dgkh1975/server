@@ -1,8 +1,8 @@
 ﻿CREATE PROCEDURE [dbo].[EmergencyAccess_Create]
-    @Id UNIQUEIDENTIFIER,
+    @Id UNIQUEIDENTIFIER OUTPUT,
     @GrantorId UNIQUEIDENTIFIER,
     @GranteeId UNIQUEIDENTIFIER,
-    @Email NVARCHAR(50),
+    @Email NVARCHAR(256),
     @KeyEncrypted VARCHAR(MAX),
     @Type TINYINT,
     @Status TINYINT,

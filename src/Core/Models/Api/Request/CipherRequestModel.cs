@@ -20,6 +20,7 @@ namespace Bit.Core.Models.Api
         public string OrganizationId { get; set; }
         public string FolderId { get; set; }
         public bool Favorite { get; set; }
+        public CipherRepromptType Reprompt { get; set; }
         [Required]
         [EncryptedString]
         [EncryptedStringLength(1000)]
@@ -88,6 +89,8 @@ namespace Bit.Core.Models.Api
                 default:
                     throw new ArgumentException("Unsupported type: " + nameof(Type) + ".");
             }
+
+            existingCipher.Reprompt = Reprompt;
 
             var hasAttachments2 = (Attachments2?.Count ?? 0) > 0;
             var hasAttachments = (Attachments?.Count ?? 0) > 0;

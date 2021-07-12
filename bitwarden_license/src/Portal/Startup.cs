@@ -1,4 +1,6 @@
 ﻿using Bit.Core;
+using Bit.Core.Context;
+using Bit.Core.Settings;
 using Bit.Core.Utilities;
 using Bit.Portal.Utilities;
 using Microsoft.AspNetCore.Builder;
@@ -8,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System;
 
 namespace Bit.Portal
 {
@@ -40,7 +43,7 @@ namespace Bit.Portal
 
             // Context
             services.AddScoped<EnterprisePortalCurrentContext>();
-            services.AddScoped<CurrentContext>((serviceProvider) =>
+            services.AddScoped<ICurrentContext, CurrentContext>((serviceProvider) =>
                 serviceProvider.GetService<EnterprisePortalCurrentContext>());
 
             // Identity

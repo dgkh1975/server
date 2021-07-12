@@ -9,6 +9,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Bit.Core.Utilities;
 using Bit.Core.Models.Data;
+using Bit.Core.Settings;
 
 namespace Bit.Core.Repositories.SqlServer
 {
@@ -139,11 +140,6 @@ namespace Bit.Core.Repositories.SqlServer
                     new { GroupId = groupId, OrganizationUserIds = organizationUserIds.ToGuidIdArrayTVP() },
                     commandType: CommandType.StoredProcedure);
             }
-        }
-
-        public class GroupWithCollections : Group
-        {
-            public DataTable Collections { get; set; }
         }
     }
 }

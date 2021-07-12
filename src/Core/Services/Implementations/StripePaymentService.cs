@@ -5,11 +5,12 @@ using Stripe;
 using System.Collections.Generic;
 using Bit.Core.Exceptions;
 using System.Linq;
+using Bit.Billing.Models;
 using Bit.Core.Models.Business;
 using Bit.Core.Enums;
 using Bit.Core.Repositories;
+using Bit.Core.Settings;
 using Microsoft.Extensions.Logging;
-using Bit.Billing.Models;
 using StripeTaxRate = Stripe.TaxRate;
 using TaxRate = Bit.Core.Models.Table.TaxRate;
 
@@ -54,7 +55,7 @@ namespace Bit.Core.Services
 
         public async Task<string> PurchaseOrganizationAsync(Organization org, PaymentMethodType paymentMethodType,
             string paymentToken, Models.StaticStore.Plan plan, short additionalStorageGb,
-            short additionalSeats, bool premiumAccessAddon, TaxInfo taxInfo)
+            int additionalSeats, bool premiumAccessAddon, TaxInfo taxInfo)
         {
             var customerService = new CustomerService();
 
@@ -201,7 +202,7 @@ namespace Bit.Core.Services
         }
 
         public async Task<string> UpgradeFreeOrganizationAsync(Organization org, Models.StaticStore.Plan plan,
-            short additionalStorageGb, short additionalSeats, bool premiumAccessAddon, TaxInfo taxInfo)
+            short additionalStorageGb, int additionalSeats, bool premiumAccessAddon, TaxInfo taxInfo)
         {
             if (!string.IsNullOrWhiteSpace(org.GatewaySubscriptionId))
             {

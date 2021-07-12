@@ -1,5 +1,5 @@
 ﻿using System;
-using Bit.Core;
+using Bit.Core.Context;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,8 +15,8 @@ namespace Bit.Portal
     {
         private readonly IServiceProvider _serviceProvider;
 
-        public EnterprisePortalCurrentContext(IServiceProvider serviceProvider)
-            : base()
+        public EnterprisePortalCurrentContext(IProviderOrganizationRepository providerOrganizationRepository,
+            IServiceProvider serviceProvider) : base(providerOrganizationRepository)
         {
             _serviceProvider = serviceProvider;
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Bit.Core.Enums;
 using Bit.Core.Exceptions;
@@ -9,40 +10,54 @@ using Bit.Core.Models.Data;
 using Bit.Core.Models.Table;
 using Bit.Core.Repositories;
 using Bit.Core.Utilities;
+using Bit.Core.Settings;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Bit.Core.Models.Api;
 
 namespace Bit.Core.Services
 {
     public class EmergencyAccessService : IEmergencyAccessService
     {
         private readonly IEmergencyAccessRepository _emergencyAccessRepository;
+        private readonly IOrganizationUserRepository _organizationUserRepository;
         private readonly IUserRepository _userRepository;
         private readonly ICipherRepository _cipherRepository;
+        private readonly IPolicyRepository _policyRepository;
+        private readonly ICipherService _cipherService;
         private readonly IMailService _mailService;
         private readonly IUserService _userService;
         private readonly IDataProtector _dataProtector;
         private readonly GlobalSettings _globalSettings;
         private readonly IPasswordHasher<User> _passwordHasher;
+        private readonly IOrganizationService _organizationService;
 
         public EmergencyAccessService(
             IEmergencyAccessRepository emergencyAccessRepository,
+            IOrganizationUserRepository organizationUserRepository,
             IUserRepository userRepository,
             ICipherRepository cipherRepository,
+            IPolicyRepository policyRepository,
+            ICipherService cipherService,
             IMailService mailService,
             IUserService userService,
             IPasswordHasher<User> passwordHasher,
             IDataProtectionProvider dataProtectionProvider,
-            GlobalSettings globalSettings)
+            GlobalSettings globalSettings,
+            IOrganizationService organizationService)
         {
             _emergencyAccessRepository = emergencyAccessRepository;
+            _organizationUserRepository = organizationUserRepository;
             _userRepository = userRepository;
             _cipherRepository = cipherRepository;
+            _policyRepository = policyRepository;
+            _cipherService = cipherService;
             _mailService = mailService;
             _userService = userService;
             _passwordHasher = passwordHasher;
             _dataProtector = dataProtectionProvider.CreateProtector("EmergencyAccessServiceDataProtector");
             _globalSettings = globalSettings;
+            _organizationService = organizationService;
         }
 
         public async Task<EmergencyAccess> InviteAsync(User invitingUser, string email, EmergencyAccessType type, int waitTime)
@@ -105,15 +120,19 @@ namespace Bit.Core.Services
                 throw new BadRequestException("Invalid token.");
             }
 
+            if (emergencyAccess.Status == EmergencyAccessStatusType.Accepted)
+            {
+                throw new BadRequestException("Invitation already accepted. You will receive an email when the grantor confirms you as an emergency access contact.");
+            }
+            else if (emergencyAccess.Status != EmergencyAccessStatusType.Invited)
+            {
+                throw new BadRequestException("Invitation already accepted.");
+            }
+
             if (string.IsNullOrWhiteSpace(emergencyAccess.Email) ||
                 !emergencyAccess.Email.Equals(user.Email, StringComparison.InvariantCultureIgnoreCase))
             {
                 throw new BadRequestException("User email does not match invite.");
-            }
-
-            if (emergencyAccess.Status != EmergencyAccessStatusType.Invited)
-            {
-                throw new BadRequestException("Already accepted.");
             }
 
             var granteeEmail = emergencyAccess.Email;
@@ -229,12 +248,29 @@ namespace Bit.Core.Services
             await _mailService.SendEmergencyAccessRecoveryRejected(emergencyAccess, NameOrEmail(rejectingUser), grantee.Email);
         }
 
+        public async Task<ICollection<Policy>> GetPoliciesAsync(Guid id, User requestingUser)
+        {
+            var emergencyAccess = await _emergencyAccessRepository.GetByIdAsync(id);
+
+            if (!IsValidRequest(emergencyAccess, requestingUser, EmergencyAccessType.Takeover))
+            {
+                throw new BadRequestException("Emergency Access not valid.");
+            }
+
+            var grantor = await _userRepository.GetByIdAsync(emergencyAccess.GrantorId);
+
+            var grantorOrganizations = await _organizationUserRepository.GetManyByUserAsync(grantor.Id);
+            var isOrganizationOwner = grantorOrganizations.Any<OrganizationUser>(organization => organization.Type == OrganizationUserType.Owner);
+            var policies = isOrganizationOwner ? await _policyRepository.GetManyByUserIdAsync(grantor.Id) : null;
+
+            return policies;
+        }
+
         public async Task<(EmergencyAccess, User)> TakeoverAsync(Guid id, User requestingUser)
         {
             var emergencyAccess = await _emergencyAccessRepository.GetByIdAsync(id);
 
-            if (emergencyAccess == null || emergencyAccess.GranteeId != requestingUser.Id ||
-                emergencyAccess.Status != EmergencyAccessStatusType.RecoveryApproved)
+            if (!IsValidRequest(emergencyAccess, requestingUser, EmergencyAccessType.Takeover))
             {
                 throw new BadRequestException("Emergency Access not valid.");
             }
@@ -248,8 +284,7 @@ namespace Bit.Core.Services
         {
             var emergencyAccess = await _emergencyAccessRepository.GetByIdAsync(id);
 
-            if (emergencyAccess == null || emergencyAccess.GranteeId != requestingUser.Id ||
-                emergencyAccess.Status != EmergencyAccessStatusType.RecoveryApproved)
+            if (!IsValidRequest(emergencyAccess, requestingUser, EmergencyAccessType.Takeover))
             {
                 throw new BadRequestException("Emergency Access not valid.");
             }
@@ -261,6 +296,16 @@ namespace Bit.Core.Services
             // Disable TwoFactor providers since they will otherwise block logins
             grantor.SetTwoFactorProviders(new Dictionary<TwoFactorProviderType, TwoFactorProvider>());
             await _userRepository.ReplaceAsync(grantor);
+
+            // Remove grantor from all organizations unless Owner
+            var orgUser = await _organizationUserRepository.GetManyByUserAsync(grantor.Id);
+            foreach (var o in orgUser)
+            {
+                if (o.Type != OrganizationUserType.Owner)
+                {
+                    await _organizationService.DeleteUserAsync(o.OrganizationId, grantor.Id);
+                }
+            }
         }
 
         public async Task SendNotificationsAsync()
@@ -272,8 +317,10 @@ namespace Bit.Core.Services
                 var ea = notify.ToEmergencyAccess();
                 ea.LastNotificationDate = DateTime.UtcNow;
                 await _emergencyAccessRepository.ReplaceAsync(ea);
-                
-                await _mailService.SendEmergencyAccessRecoveryReminder(ea, notify.GranteeName, notify.GrantorEmail);
+
+                var granteeNameOrEmail = string.IsNullOrWhiteSpace(notify.GranteeName) ? notify.GranteeEmail : notify.GranteeName;
+
+                await _mailService.SendEmergencyAccessRecoveryReminder(ea, granteeNameOrEmail, notify.GrantorEmail);
             }
         }
 
@@ -286,9 +333,12 @@ namespace Bit.Core.Services
                 var ea = details.ToEmergencyAccess();
                 ea.Status = EmergencyAccessStatusType.RecoveryApproved;
                 await _emergencyAccessRepository.ReplaceAsync(ea);
-                
-                await _mailService.SendEmergencyAccessRecoveryApproved(ea, details.GrantorName, details.GranteeEmail);
-                await _mailService.SendEmergencyAccessRecoveryTimedOut(ea, details.GranteeName, details.GrantorEmail);
+
+                var grantorNameOrEmail = string.IsNullOrWhiteSpace(details.GrantorName) ? details.GrantorEmail : details.GrantorName;
+                var granteeNameOrEmail = string.IsNullOrWhiteSpace(details.GranteeName) ? details.GranteeEmail : details.GranteeName;
+
+                await _mailService.SendEmergencyAccessRecoveryApproved(ea, grantorNameOrEmail, details.GranteeEmail);
+                await _mailService.SendEmergencyAccessRecoveryTimedOut(ea, granteeNameOrEmail, details.GrantorEmail);
             }
         }
 
@@ -296,8 +346,7 @@ namespace Bit.Core.Services
         {
             var emergencyAccess = await _emergencyAccessRepository.GetByIdAsync(id);
 
-            if (emergencyAccess == null || emergencyAccess.GranteeId != requestingUser.Id ||
-                emergencyAccess.Status != EmergencyAccessStatusType.RecoveryApproved)
+            if (!IsValidRequest(emergencyAccess, requestingUser, EmergencyAccessType.View))
             {
                 throw new BadRequestException("Emergency Access not valid.");
             }
@@ -305,6 +354,19 @@ namespace Bit.Core.Services
             var ciphers = await _cipherRepository.GetManyByUserIdAsync(emergencyAccess.GrantorId, false);
             
             return new EmergencyAccessViewResponseModel(_globalSettings, emergencyAccess, ciphers);
+        }
+
+        public async Task<AttachmentResponseModel> GetAttachmentDownloadAsync(Guid id, string cipherId, string attachmentId, User requestingUser)
+        {
+            var emergencyAccess = await _emergencyAccessRepository.GetByIdAsync(id);
+
+            if (!IsValidRequest(emergencyAccess, requestingUser, EmergencyAccessType.View))
+            {
+                throw new BadRequestException("Emergency Access not valid.");
+            }
+
+            var cipher = await _cipherRepository.GetByIdAsync(new Guid(cipherId), emergencyAccess.GrantorId);
+            return await _cipherService.GetAttachmentDownloadDataAsync(cipher, attachmentId);
         }
 
         private async Task SendInviteAsync(EmergencyAccess emergencyAccess, string invitingUsersName)
@@ -317,6 +379,13 @@ namespace Bit.Core.Services
         private string NameOrEmail(User user)
         {
             return string.IsNullOrWhiteSpace(user.Name) ? user.Email : user.Name;
+        }
+
+        private bool IsValidRequest(EmergencyAccess availibleAccess, User requestingUser, EmergencyAccessType requestedAccessType) {
+             return availibleAccess != null && 
+                availibleAccess.GranteeId == requestingUser.Id &&
+                availibleAccess.Status == EmergencyAccessStatusType.RecoveryApproved &&
+                availibleAccess.Type == requestedAccessType;
         }
     }
 }

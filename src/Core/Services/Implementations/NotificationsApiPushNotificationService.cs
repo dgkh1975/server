@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Bit.Core.Context;
 using Bit.Core.Models.Table;
 using Bit.Core.Enums;
+using Bit.Core.Settings;
 using Newtonsoft.Json;
 using Bit.Core.Models;
 using Microsoft.AspNetCore.Http;
@@ -187,7 +189,7 @@ namespace Bit.Core.Services
             }
 
             var currentContext = _httpContextAccessor?.HttpContext?.
-                RequestServices.GetService(typeof(CurrentContext)) as CurrentContext;
+                RequestServices.GetService(typeof(ICurrentContext)) as ICurrentContext;
             return currentContext?.DeviceIdentifier;
         }
 

@@ -6,6 +6,7 @@ using Bit.Core.Models.Data;
 using Bit.Core.Models.Table;
 using Bit.Core.Utilities;
 using Microsoft.Azure.Cosmos.Table;
+using Bit.Core.Settings;
 
 namespace Bit.Core.Repositories.TableStorage
 {
@@ -61,14 +62,14 @@ namespace Bit.Core.Repositories.TableStorage
             await CreateEntityAsync(entity);
         }
 
-        public async Task CreateManyAsync(IList<IEvent> e)
+        public async Task CreateManyAsync(IEnumerable<IEvent> e)
         {
             if (!e?.Any() ?? true)
             {
                 return;
             }
 
-            if (e.Count == 1)
+            if (!e.Skip(1).Any())
             {
                 await CreateAsync(e.First());
                 return;

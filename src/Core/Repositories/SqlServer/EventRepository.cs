@@ -3,6 +3,7 @@ using Bit.Core.Models.Table;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Bit.Core.Models.Data;
+using Bit.Core.Settings;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Data;
@@ -73,14 +74,14 @@ namespace Bit.Core.Repositories.SqlServer
             await base.CreateAsync(ev);
         }
 
-        public async Task CreateManyAsync(IList<IEvent> entities)
+        public async Task CreateManyAsync(IEnumerable<IEvent> entities)
         {
             if (!entities?.Any() ?? true)
             {
                 return;
             }
 
-            if (entities.Count == 1)
+            if (!entities.Skip(1).Any())
             {
                 await CreateAsync(entities.First());
                 return;
@@ -163,9 +164,9 @@ namespace Bit.Core.Repositories.SqlServer
             eventsTable.Columns.Add(actingUserIdColumn);
             var deviceTypeColumn = new DataColumn(nameof(e.DeviceType), typeof(int));
             eventsTable.Columns.Add(deviceTypeColumn);
-            var ipAddressColumn = new DataColumn(nameof(e.IpAddress), e.IpAddress.GetType());
+            var ipAddressColumn = new DataColumn(nameof(e.IpAddress), typeof(string));
             eventsTable.Columns.Add(ipAddressColumn);
-            var dateColumn = new DataColumn(nameof(e.Date), e.Date.GetType());
+            var dateColumn = new DataColumn(nameof(e.Date), typeof(DateTime));
             eventsTable.Columns.Add(dateColumn);
 
             foreach (DataColumn col in eventsTable.Columns)

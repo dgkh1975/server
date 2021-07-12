@@ -2,6 +2,7 @@
 using Bit.Core.Services;
 using Microsoft.AspNetCore.Authorization;
 using Bit.Core;
+using Bit.Core.Context;
 using Bit.Core.Exceptions;
 using Bit.Core.Models.Api;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using System.Linq;
 using Microsoft.AspNetCore.Hosting;
 using Bit.Api.Utilities;
 using Bit.Core.Utilities;
+using Bit.Core.Settings;
 using Microsoft.Extensions.Hosting;
 
 namespace Bit.Api.Controllers
@@ -21,14 +23,14 @@ namespace Bit.Api.Controllers
         private readonly IPushRegistrationService _pushRegistrationService;
         private readonly IPushNotificationService _pushNotificationService;
         private readonly IWebHostEnvironment _environment;
-        private readonly CurrentContext _currentContext;
+        private readonly ICurrentContext _currentContext;
         private readonly GlobalSettings _globalSettings;
 
         public PushController(
             IPushRegistrationService pushRegistrationService,
             IPushNotificationService pushNotificationService,
             IWebHostEnvironment environment,
-            CurrentContext currentContext,
+            ICurrentContext currentContext,
             GlobalSettings globalSettings)
         {
             _currentContext = currentContext;

@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Identity;
 using Bit.Core.Models.Table;
 using Bit.Core.Repositories;
 using Bit.Core.Services;
+using Bit.Core.Context;
+using Bit.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bit.Core.Identity
@@ -18,12 +20,12 @@ namespace Bit.Core.Identity
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IUserRepository _userRepository;
-        private readonly CurrentContext _currentContext;
+        private readonly ICurrentContext _currentContext;
 
         public UserStore(
             IServiceProvider serviceProvider,
             IUserRepository userRepository,
-            CurrentContext currentContext)
+            ICurrentContext currentContext)
         {
             _serviceProvider = serviceProvider;
             _userRepository = userRepository;

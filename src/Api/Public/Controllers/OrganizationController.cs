@@ -1,10 +1,11 @@
 ﻿using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using Bit.Core;
+using Bit.Core.Context;
 using Bit.Core.Exceptions;
 using Bit.Core.Models.Api.Public;
 using Bit.Core.Services;
+using Bit.Core.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,12 +16,12 @@ namespace Bit.Api.Public.Controllers
     public class OrganizationController : Controller
     {
         private readonly IOrganizationService _organizationService;
-        private readonly CurrentContext _currentContext;
+        private readonly ICurrentContext _currentContext;
         private readonly GlobalSettings _globalSettings;
 
         public OrganizationController(
             IOrganizationService organizationService,
-            CurrentContext currentContext,
+            ICurrentContext currentContext,
             GlobalSettings globalSettings)
         {
             _organizationService = organizationService;
@@ -40,7 +41,7 @@ namespace Bit.Api.Public.Controllers
         [ProducesResponseType(typeof(ErrorResponseModel), (int)HttpStatusCode.BadRequest)]
         public async Task<IActionResult> Import([FromBody]OrganizationImportRequestModel model)
         {
-            if (!_globalSettings.SelfHosted &&
+            if (!_globalSettings.SelfHosted && !model.LargeImport &&
                 (model.Groups.Count() > 2000 || model.Members.Count(u => !u.Deleted) > 2000))
             {
                 throw new BadRequestException("You cannot import this much data at once.");

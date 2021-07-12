@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Bit.Core;
 using Bit.Core.Jobs;
+using Bit.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
@@ -13,16 +13,12 @@ namespace Bit.Billing.Jobs
 {
     public class JobsHostedService : BaseJobsHostedService
     {
-        private readonly GlobalSettings _globalSettings;
-
         public JobsHostedService(
             GlobalSettings globalSettings,
             IServiceProvider serviceProvider,
             ILogger<JobsHostedService> logger,
             ILogger<JobListener> listenerLogger)
-            : base(serviceProvider, logger, listenerLogger) {
-            _globalSettings = globalSettings;
-        }
+            : base(globalSettings, serviceProvider, logger, listenerLogger) {}
 
         public override async Task StartAsync(CancellationToken cancellationToken)
         {
@@ -35,6 +31,7 @@ namespace Bit.Billing.Jobs
             }
 
             var everyDayAtNinePmTrigger = TriggerBuilder.Create()
+                .WithIdentity("EveryDayAtNinePmTrigger")
                 .StartNow()
                 .WithCronSchedule("0 0 21 * * ?", x => x.InTimeZone(timeZone))
                 .Build();

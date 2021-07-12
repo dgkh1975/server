@@ -10,6 +10,7 @@ using Core.Models.Data;
 using Bit.Core.Utilities;
 using Newtonsoft.Json;
 using Bit.Core.Models.Data;
+using Bit.Core.Settings;
 
 namespace Bit.Core.Repositories.SqlServer
 {
@@ -281,7 +282,7 @@ namespace Bit.Core.Repositories.SqlServer
             }
         }
 
-        public Task UpdateUserKeysAndCiphersAsync(User user, IEnumerable<Cipher> ciphers, IEnumerable<Folder> folders)
+        public Task UpdateUserKeysAndCiphersAsync(User user, IEnumerable<Cipher> ciphers, IEnumerable<Folder> folders, IEnumerable<Send> sends)
         {
             using (var connection = new SqlConnection(ConnectionString))
             {
@@ -322,7 +323,11 @@ namespace Bit.Core.Repositories.SqlServer
 
                             SELECT TOP 0 *
                             INTO #TempFolder
-                            FROM [dbo].[Folder]";
+                            FROM [dbo].[Folder]
+
+                            SELECT TOP 0 *
+                            INTO #TempSend
+                            FROM [dbo].[Send]";
 
                         using (var cmd = new SqlCommand(sqlCreateTemp, connection, transaction))
                         {
@@ -347,6 +352,16 @@ namespace Bit.Core.Repositories.SqlServer
                             {
                                 bulkCopy.DestinationTableName = "#TempFolder";
                                 var dataTable = BuildFoldersTable(bulkCopy, folders);
+                                bulkCopy.WriteToServer(dataTable);
+                            }
+                        }
+
+                        if (sends.Any())
+                        {
+                            using (var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.KeepIdentity, transaction))
+                            {
+                                bulkCopy.DestinationTableName = "#TempSend";
+                                var dataTable = BuildSendsTable(bulkCopy, sends);
                                 bulkCopy.WriteToServer(dataTable);
                             }
                         }
@@ -388,9 +403,26 @@ namespace Bit.Core.Repositories.SqlServer
                                     F.[UserId] = @UserId";
                         }
 
+                        if (sends.Any())
+                        {
+                            sql += @"
+                                UPDATE
+                                    [dbo].[Send]
+                                SET
+                                    [Key] = TS.[Key],
+                                    [RevisionDate] = TS.[RevisionDate]
+                                FROM
+                                    [dbo].[Send] S
+                                INNER JOIN
+                                    #TempSend TS ON S.Id = TS.Id
+                                WHERE
+                                    S.[UserId] = @UserId";
+                        }
+
                         sql += @"
                             DROP TABLE #TempCipher
-                            DROP TABLE #TempFolder";
+                            DROP TABLE #TempFolder
+                            DROP TABLE #TempSend";
 
                         using (var cmd = new SqlCommand(sql, connection, transaction))
                         {
@@ -623,6 +655,18 @@ namespace Bit.Core.Repositories.SqlServer
             }
         }
 
+        public async Task DeleteDeletedAsync(DateTime deletedDateBefore)
+        {
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                await connection.ExecuteAsync(
+                    $"[{Schema}].[Cipher_DeleteDeleted]",
+                    new { DeletedDateBefore = deletedDateBefore },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 43200);
+            }
+        }
+
         private DataTable BuildCiphersTable(SqlBulkCopy bulkCopy, IEnumerable<Cipher> ciphers)
         {
             var c = ciphers.FirstOrDefault();
@@ -655,6 +699,8 @@ namespace Bit.Core.Repositories.SqlServer
             ciphersTable.Columns.Add(revisionDateColumn);
             var deletedDateColumn = new DataColumn(nameof(c.DeletedDate), typeof(DateTime));
             ciphersTable.Columns.Add(deletedDateColumn);
+            var repromptColumn = new DataColumn(nameof(c.Reprompt), typeof(short));
+            ciphersTable.Columns.Add(repromptColumn);
 
             foreach (DataColumn col in ciphersTable.Columns)
             {
@@ -680,6 +726,7 @@ namespace Bit.Core.Repositories.SqlServer
                 row[creationDateColumn] = cipher.CreationDate;
                 row[revisionDateColumn] = cipher.RevisionDate;
                 row[deletedDateColumn] = cipher.DeletedDate.HasValue ? (object)cipher.DeletedDate : DBNull.Value;
+                row[repromptColumn] = cipher.Reprompt;
 
                 ciphersTable.Rows.Add(row);
             }
@@ -815,6 +862,82 @@ namespace Bit.Core.Repositories.SqlServer
             }
 
             return collectionCiphersTable;
+        }
+
+        private DataTable BuildSendsTable(SqlBulkCopy bulkCopy, IEnumerable<Send> sends)
+        {
+            var s = sends.FirstOrDefault();
+            if (s == null)
+            {
+                throw new ApplicationException("Must have some Sends to bulk import.");
+            }
+
+            var sendsTable = new DataTable("SendsDataTable");
+
+            var idColumn = new DataColumn(nameof(s.Id), s.Id.GetType());
+            sendsTable.Columns.Add(idColumn);
+            var userIdColumn = new DataColumn(nameof(s.UserId), typeof(Guid));
+            sendsTable.Columns.Add(userIdColumn);
+            var organizationIdColumn = new DataColumn(nameof(s.OrganizationId), typeof(Guid));
+            sendsTable.Columns.Add(organizationIdColumn);
+            var typeColumn = new DataColumn(nameof(s.Type), s.Type.GetType());
+            sendsTable.Columns.Add(typeColumn);
+            var dataColumn = new DataColumn(nameof(s.Data), s.Data.GetType());
+            sendsTable.Columns.Add(dataColumn);
+            var keyColumn = new DataColumn(nameof(s.Key), s.Key.GetType());
+            sendsTable.Columns.Add(keyColumn);
+            var passwordColumn = new DataColumn(nameof(s.Password), typeof(string));
+            sendsTable.Columns.Add(passwordColumn);
+            var maxAccessCountColumn = new DataColumn(nameof(s.MaxAccessCount), typeof(int));
+            sendsTable.Columns.Add(maxAccessCountColumn);
+            var accessCountColumn = new DataColumn(nameof(s.AccessCount), s.AccessCount.GetType());
+            sendsTable.Columns.Add(accessCountColumn);
+            var creationDateColumn = new DataColumn(nameof(s.CreationDate), s.CreationDate.GetType());
+            sendsTable.Columns.Add(creationDateColumn);
+            var revisionDateColumn = new DataColumn(nameof(s.RevisionDate), s.RevisionDate.GetType());
+            sendsTable.Columns.Add(revisionDateColumn);
+            var expirationDateColumn = new DataColumn(nameof(s.ExpirationDate), typeof(DateTime));
+            sendsTable.Columns.Add(expirationDateColumn);
+            var deletionDateColumn = new DataColumn(nameof(s.DeletionDate), s.DeletionDate.GetType());
+            sendsTable.Columns.Add(deletionDateColumn);
+            var disabledColumn = new DataColumn(nameof(s.Disabled), s.Disabled.GetType());
+            sendsTable.Columns.Add(disabledColumn);
+            var hideEmailColumn = new DataColumn(nameof(s.HideEmail), typeof(bool));
+            sendsTable.Columns.Add(hideEmailColumn);
+
+            foreach (DataColumn col in sendsTable.Columns)
+            {
+                bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+            }
+
+            var keys = new DataColumn[1];
+            keys[0] = idColumn;
+            sendsTable.PrimaryKey = keys;
+
+            foreach (var send in sends)
+            {
+                var row = sendsTable.NewRow();
+
+                row[idColumn] = send.Id;
+                row[userIdColumn] = send.UserId.HasValue ? (object)send.UserId.Value : DBNull.Value;
+                row[organizationIdColumn] = send.OrganizationId.HasValue ? (object)send.OrganizationId.Value : DBNull.Value;
+                row[typeColumn] = (short)send.Type;
+                row[dataColumn] = send.Data;
+                row[keyColumn] = send.Key;
+                row[passwordColumn] = send.Password;
+                row[maxAccessCountColumn] = send.MaxAccessCount.HasValue ? (object)send.MaxAccessCount : DBNull.Value;
+                row[accessCountColumn] = send.AccessCount;
+                row[creationDateColumn] = send.CreationDate;
+                row[revisionDateColumn] = send.RevisionDate;
+                row[expirationDateColumn] = send.ExpirationDate.HasValue ? (object)send.ExpirationDate : DBNull.Value;
+                row[deletionDateColumn] = send.DeletionDate;
+                row[disabledColumn] = send.Disabled;
+                row[hideEmailColumn] = send.HideEmail.HasValue ? (object)send.HideEmail : DBNull.Value;
+
+                sendsTable.Rows.Add(row);
+            }
+
+            return sendsTable;
         }
 
         public class CipherDetailsWithCollections : CipherDetails

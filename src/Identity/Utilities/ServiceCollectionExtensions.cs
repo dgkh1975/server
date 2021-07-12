@@ -1,6 +1,6 @@
 ﻿using System;
-using Bit.Core;
 using Bit.Core.IdentityServer;
+using Bit.Core.Settings;
 using Bit.Core.Utilities;
 using IdentityServer4.ResponseHandling;
 using IdentityServer4.Services;
@@ -36,6 +36,7 @@ namespace Bit.Identity.Utilities
                     {
                         options.Authentication.CookieSameSiteMode = Microsoft.AspNetCore.Http.SameSiteMode.Unspecified;
                     }
+                    options.InputLengthRestrictions.UserName = 256;
                 })
                 .AddInMemoryCaching()
                 .AddInMemoryApiResources(ApiResources.GetApiResources())

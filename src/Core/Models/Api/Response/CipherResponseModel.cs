@@ -5,6 +5,8 @@ using Bit.Core.Models.Table;
 using System.Linq;
 using Newtonsoft.Json;
 using Bit.Core.Models.Data;
+using Bit.Core.Settings;
+using Bit.Core.Enums;
 
 namespace Bit.Core.Models.Api
 {
@@ -61,6 +63,7 @@ namespace Bit.Core.Models.Api
             Attachments = AttachmentResponseModel.FromCipher(cipher, globalSettings);
             OrganizationUseTotp = orgUseTotp;
             DeletedDate = cipher.DeletedDate;
+            Reprompt = cipher.Reprompt.GetValueOrDefault(CipherRepromptType.None);
         }
 
         public string Id { get; set; }
@@ -79,6 +82,7 @@ namespace Bit.Core.Models.Api
         public bool OrganizationUseTotp { get; set; }
         public DateTime RevisionDate { get; set; }
         public DateTime? DeletedDate { get; set; }
+        public CipherRepromptType Reprompt { get; set; }
     }
 
     public class CipherResponseModel : CipherMiniResponseModel

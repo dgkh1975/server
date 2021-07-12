@@ -14,12 +14,15 @@ using Bit.Core.Models.Business;
 using U2fLib = U2F.Core.Crypto.U2F;
 using U2F.Core.Models;
 using U2F.Core.Utils;
+using Bit.Core.Context;
 using Bit.Core.Exceptions;
 using Bit.Core.Utilities;
+using Bit.Core.Settings;
 using System.IO;
 using Newtonsoft.Json;
 using Microsoft.AspNetCore.DataProtection;
-using U2F.Core.Exceptions;
+using Fido2NetLib;
+using Fido2NetLib.Objects;
 
 namespace Bit.Core.Services
 {
@@ -32,7 +35,6 @@ namespace Bit.Core.Services
         private readonly ICipherRepository _cipherRepository;
         private readonly IOrganizationUserRepository _organizationUserRepository;
         private readonly IOrganizationRepository _organizationRepository;
-        private readonly IU2fRepository _u2fRepository;
         private readonly IMailService _mailService;
         private readonly IPushNotificationService _pushService;
         private readonly IdentityErrorDescriber _identityErrorDescriber;
@@ -46,16 +48,17 @@ namespace Bit.Core.Services
         private readonly IPolicyRepository _policyRepository;
         private readonly IDataProtector _organizationServiceDataProtector;
         private readonly IReferenceEventService _referenceEventService;
-        private readonly CurrentContext _currentContext;
+        private readonly IFido2 _fido2;
+        private readonly ICurrentContext _currentContext;
         private readonly GlobalSettings _globalSettings;
         private readonly IOrganizationService _organizationService;
+        private readonly ISendRepository _sendRepository;
 
         public UserService(
             IUserRepository userRepository,
             ICipherRepository cipherRepository,
             IOrganizationUserRepository organizationUserRepository,
             IOrganizationRepository organizationRepository,
-            IU2fRepository u2fRepository,
             IMailService mailService,
             IPushNotificationService pushService,
             IUserStore<User> store,
@@ -74,9 +77,11 @@ namespace Bit.Core.Services
             IPaymentService paymentService,
             IPolicyRepository policyRepository,
             IReferenceEventService referenceEventService,
-            CurrentContext currentContext,
+            IFido2 fido2,
+            ICurrentContext currentContext,
             GlobalSettings globalSettings,
-            IOrganizationService organizationService)
+            IOrganizationService organizationService,
+            ISendRepository sendRepository)
             : base(
                   store,
                   optionsAccessor,
@@ -92,7 +97,6 @@ namespace Bit.Core.Services
             _cipherRepository = cipherRepository;
             _organizationUserRepository = organizationUserRepository;
             _organizationRepository = organizationRepository;
-            _u2fRepository = u2fRepository;
             _mailService = mailService;
             _pushService = pushService;
             _identityOptions = optionsAccessor?.Value ?? new IdentityOptions();
@@ -107,9 +111,11 @@ namespace Bit.Core.Services
             _organizationServiceDataProtector = dataProtectionProvider.CreateProtector(
                 "OrganizationServiceDataProtector");
             _referenceEventService = referenceEventService;
+            _fido2 = fido2;
             _currentContext = currentContext;
             _globalSettings = globalSettings;
             _organizationService = organizationService;
+            _sendRepository = sendRepository;
         }
 
         public Guid? GetProperUserId(ClaimsPrincipal principal)
@@ -360,107 +366,94 @@ namespace Bit.Core.Services
                 "2faEmail:" + email, token);
         }
 
-        public async Task<U2fRegistration> StartU2fRegistrationAsync(User user)
+        public async Task<CredentialCreateOptions> StartWebAuthnRegistrationAsync(User user)
         {
-            await _u2fRepository.DeleteManyByUserIdAsync(user.Id);
-            var reg = U2fLib.StartRegistration(CoreHelpers.U2fAppIdUrl(_globalSettings));
-            await _u2fRepository.CreateAsync(new U2f
+            var providers = user.GetTwoFactorProviders();
+            if (providers == null)
             {
-                AppId = reg.AppId,
-                Challenge = reg.Challenge,
-                Version = reg.Version,
-                UserId = user.Id,
-                CreationDate = DateTime.UtcNow
-            });
+                providers = new Dictionary<TwoFactorProviderType, TwoFactorProvider>();
+            }
+            var provider = user.GetTwoFactorProvider(TwoFactorProviderType.WebAuthn);
+            if (provider == null)
+            {
+                provider = new TwoFactorProvider
+                {
+                    Enabled = false
+                };
+            }
+            if (provider.MetaData == null)
+            {
+                provider.MetaData = new Dictionary<string, object>();
+            }
 
-            return new U2fRegistration
+            var fidoUser = new Fido2User
             {
-                AppId = reg.AppId,
-                Challenge = reg.Challenge,
-                Version = reg.Version
+                DisplayName = user.Name,
+                Name = user.Email,
+                Id = user.Id.ToByteArray(),
             };
+
+            var excludeCredentials = provider.MetaData
+                .Where(k => k.Key.StartsWith("Key"))
+                .Select(k => new TwoFactorProvider.WebAuthnData((dynamic)k.Value).Descriptor)
+                .ToList();
+
+            var authenticatorSelection = new AuthenticatorSelection
+            {
+                AuthenticatorAttachment = null,
+                RequireResidentKey = false,
+                UserVerification = UserVerificationRequirement.Discouraged
+            };
+            var options = _fido2.RequestNewCredential(fidoUser, excludeCredentials, authenticatorSelection, AttestationConveyancePreference.None);
+
+            provider.MetaData["pending"] = options.ToJson();
+            providers[TwoFactorProviderType.WebAuthn] = provider;
+            user.SetTwoFactorProviders(providers);
+            await UpdateTwoFactorProviderAsync(user, TwoFactorProviderType.WebAuthn, false);
+
+            return options;
         }
 
-        public async Task<bool> CompleteU2fRegistrationAsync(User user, int id, string name, string deviceResponse)
+        public async Task<bool> CompleteWebAuthRegistrationAsync(User user, int id, string name, AuthenticatorAttestationRawResponse attestationResponse)
         {
-            if (string.IsNullOrWhiteSpace(deviceResponse))
+            var keyId = $"Key{id}";
+
+            var provider = user.GetTwoFactorProvider(TwoFactorProviderType.WebAuthn);
+            if (!provider?.MetaData?.ContainsKey("pending") ?? true)
             {
                 return false;
             }
 
-            var challenges = await _u2fRepository.GetManyByUserIdAsync(user.Id);
-            if (!challenges?.Any() ?? true)
+            var options = CredentialCreateOptions.FromJson((string)provider.MetaData["pending"]);
+
+            // Callback to ensure credential id is unique. Always return true since we don't care if another
+            // account uses the same 2fa key.
+            IsCredentialIdUniqueToUserAsyncDelegate callback = args => Task.FromResult(true);
+
+            var success = await _fido2.MakeNewCredentialAsync(attestationResponse, options, callback);
+
+            provider.MetaData.Remove("pending");
+            provider.MetaData[keyId] = new TwoFactorProvider.WebAuthnData
             {
-                return false;
-            }
+                Name = name,
+                Descriptor = new PublicKeyCredentialDescriptor(success.Result.CredentialId),
+                PublicKey = success.Result.PublicKey,
+                UserHandle = success.Result.User.Id,
+                SignatureCounter = success.Result.Counter,
+                CredType = success.Result.CredType,
+                RegDate = DateTime.Now,
+                AaGuid = success.Result.Aaguid
+            };
 
-            var registerResponse = BaseModel.FromJson<RegisterResponse>(deviceResponse);
+            var providers = user.GetTwoFactorProviders();
+            providers[TwoFactorProviderType.WebAuthn] = provider;
+            user.SetTwoFactorProviders(providers);
+            await UpdateTwoFactorProviderAsync(user, TwoFactorProviderType.WebAuthn);
 
-            try
-            {
-                var challenge = challenges.OrderBy(i => i.Id).Last(i => i.KeyHandle == null);
-                var startedReg = new StartedRegistration(challenge.Challenge, challenge.AppId);
-                var reg = U2fLib.FinishRegistration(startedReg, registerResponse);
-
-                await _u2fRepository.DeleteManyByUserIdAsync(user.Id);
-
-                // Add device
-                var providers = user.GetTwoFactorProviders();
-                if (providers == null)
-                {
-                    providers = new Dictionary<TwoFactorProviderType, TwoFactorProvider>();
-                }
-                var provider = user.GetTwoFactorProvider(TwoFactorProviderType.U2f);
-                if (provider == null)
-                {
-                    provider = new TwoFactorProvider();
-                }
-                if (provider.MetaData == null)
-                {
-                    provider.MetaData = new Dictionary<string, object>();
-                }
-
-                if (provider.MetaData.Count >= 5)
-                {
-                    // Can only register up to 5 keys
-                    return false;
-                }
-
-                var keyId = $"Key{id}";
-                if (provider.MetaData.ContainsKey(keyId))
-                {
-                    provider.MetaData.Remove(keyId);
-                }
-
-                provider.Enabled = true;
-                provider.MetaData.Add(keyId, new TwoFactorProvider.U2fMetaData
-                {
-                    Name = name,
-                    KeyHandle = reg.KeyHandle == null ? null : Utils.ByteArrayToBase64String(reg.KeyHandle),
-                    PublicKey = reg.PublicKey == null ? null : Utils.ByteArrayToBase64String(reg.PublicKey),
-                    Certificate = reg.AttestationCert == null ? null : Utils.ByteArrayToBase64String(reg.AttestationCert),
-                    Compromised = false,
-                    Counter = reg.Counter
-                });
-
-                if (providers.ContainsKey(TwoFactorProviderType.U2f))
-                {
-                    providers.Remove(TwoFactorProviderType.U2f);
-                }
-
-                providers.Add(TwoFactorProviderType.U2f, provider);
-                user.SetTwoFactorProviders(providers);
-                await UpdateTwoFactorProviderAsync(user, TwoFactorProviderType.U2f);
-                return true;
-            }
-            catch (U2fException e)
-            {
-                Logger.LogError(e, "Complete U2F registration error.");
-                return false;
-            }
+            return true;
         }
 
-        public async Task<bool> DeleteU2fKeyAsync(User user, int id)
+        public async Task<bool> DeleteWebAuthnKeyAsync(User user, int id)
         {
             var providers = user.GetTwoFactorProviders();
             if (providers == null)
@@ -469,7 +462,7 @@ namespace Bit.Core.Services
             }
 
             var keyName = $"Key{id}";
-            var provider = user.GetTwoFactorProvider(TwoFactorProviderType.U2f);
+            var provider = user.GetTwoFactorProvider(TwoFactorProviderType.WebAuthn);
             if (!provider?.MetaData?.ContainsKey(keyName) ?? true)
             {
                 return false;
@@ -480,10 +473,29 @@ namespace Bit.Core.Services
                 return false;
             }
 
+            // Delete U2F token is this is a migrated WebAuthn token.
+            var entry = new TwoFactorProvider.WebAuthnData(provider.MetaData[keyName]);
+            if (entry?.Migrated ?? false)
+            {
+                var u2fProvider = user.GetTwoFactorProvider(TwoFactorProviderType.U2f);
+                if (u2fProvider?.MetaData?.ContainsKey(keyName) ?? false)
+                {
+                    u2fProvider.MetaData.Remove(keyName);
+                    if (u2fProvider.MetaData.Count > 0)
+                    {
+                        providers[TwoFactorProviderType.U2f] = u2fProvider;
+                    }
+                    else
+                    {
+                        providers.Remove(TwoFactorProviderType.U2f);
+                    }
+                }
+            }
+
             provider.MetaData.Remove(keyName);
-            providers[TwoFactorProviderType.U2f] = provider;
+            providers[TwoFactorProviderType.WebAuthn] = provider;
             user.SetTwoFactorProviders(providers);
-            await UpdateTwoFactorProviderAsync(user, TwoFactorProviderType.U2f);
+            await UpdateTwoFactorProviderAsync(user, TwoFactorProviderType.WebAuthn);
             return true;
         }
 
@@ -616,6 +628,76 @@ namespace Bit.Core.Services
             
             return IdentityResult.Success;
         }
+        
+        public async Task<IdentityResult> AdminResetPasswordAsync(OrganizationUserType callingUserType, Guid orgId, Guid id, string newMasterPassword, string key)
+        {
+            // Org must be able to use reset password
+            var org = await _organizationRepository.GetByIdAsync(orgId);
+            if (org == null || !org.UseResetPassword)
+            {
+                throw new BadRequestException("Organization does not allow password reset.");
+            }
+            
+            // Enterprise policy must be enabled 
+            var resetPasswordPolicy =
+                await _policyRepository.GetByOrganizationIdTypeAsync(orgId, PolicyType.ResetPassword);
+            if (resetPasswordPolicy == null || !resetPasswordPolicy.Enabled)
+            {
+                throw new BadRequestException("Organization does not have the password reset policy enabled.");
+            }
+            
+            // Org User must be confirmed and have a ResetPasswordKey
+            var orgUser = await _organizationUserRepository.GetByIdAsync(id);
+            if (orgUser == null || orgUser.Status != OrganizationUserStatusType.Confirmed ||
+                orgUser.OrganizationId != orgId || string.IsNullOrEmpty(orgUser.ResetPasswordKey) ||
+                !orgUser.UserId.HasValue)
+            {
+                throw new BadRequestException("Organization User not valid");
+            }
+            
+            // Calling User must be of higher/equal user type to reset user's password
+            var canAdjustPassword = false;
+            switch (callingUserType)
+            {
+                case OrganizationUserType.Owner:
+                    canAdjustPassword = true;
+                    break;
+                case OrganizationUserType.Admin:
+                    canAdjustPassword = orgUser.Type != OrganizationUserType.Owner;
+                    break;
+                case OrganizationUserType.Custom:
+                    canAdjustPassword = orgUser.Type != OrganizationUserType.Owner &&
+                        orgUser.Type != OrganizationUserType.Admin;
+                    break;
+            }
+
+            if (!canAdjustPassword)
+            {
+                throw new BadRequestException("Calling user does not have permission to reset this user's master password");
+            }
+
+            var user = await GetUserByIdAsync(orgUser.UserId.Value);
+            if (user == null)
+            {
+                throw new NotFoundException();
+            }
+            
+            var result = await UpdatePasswordHash(user, newMasterPassword);
+            if (!result.Succeeded)
+            {
+                return result;
+            }
+
+            user.RevisionDate = user.AccountRevisionDate = DateTime.UtcNow;
+            user.Key = key;
+
+            await _userRepository.ReplaceAsync(user);
+            await _mailService.SendAdminResetPasswordEmailAsync(user.Email, user.Name ?? user.Email, org.Name);
+            await _eventService.LogOrganizationUserEventAsync(orgUser, EventType.OrganizationUser_AdminResetPassword);
+            await _pushService.PushLogOutAsync(user.Id);
+
+            return IdentityResult.Success;
+        }
 
         public async Task<IdentityResult> ChangeKdfAsync(User user, string masterPassword, string newMasterPassword,
             string key, KdfType kdf, int kdfIterations)
@@ -647,7 +729,7 @@ namespace Bit.Core.Services
         }
 
         public async Task<IdentityResult> UpdateKeyAsync(User user, string masterPassword, string key, string privateKey,
-            IEnumerable<Cipher> ciphers, IEnumerable<Folder> folders)
+            IEnumerable<Cipher> ciphers, IEnumerable<Folder> folders, IEnumerable<Send> sends)
         {
             if (user == null)
             {
@@ -660,9 +742,9 @@ namespace Bit.Core.Services
                 user.SecurityStamp = Guid.NewGuid().ToString();
                 user.Key = key;
                 user.PrivateKey = privateKey;
-                if (ciphers.Any() || folders.Any())
+                if (ciphers.Any() || folders.Any() || sends.Any())
                 {
-                    await _cipherRepository.UpdateUserKeysAndCiphersAsync(user, ciphers, folders);
+                    await _cipherRepository.UpdateUserKeysAndCiphersAsync(user, ciphers, folders, sends);
                 }
                 else
                 {
@@ -701,9 +783,9 @@ namespace Bit.Core.Services
             return IdentityResult.Failed(_identityErrorDescriber.PasswordMismatch());
         }
 
-        public async Task UpdateTwoFactorProviderAsync(User user, TwoFactorProviderType type)
+        public async Task UpdateTwoFactorProviderAsync(User user, TwoFactorProviderType type, bool setEnabled = true)
         {
-            SetTwoFactorProvider(user, type);
+            SetTwoFactorProvider(user, type, setEnabled);
             await SaveUserAsync(user);
             await _eventService.LogUserEventAsync(user.Id, EventType.User_Updated2fa);
         }
@@ -715,6 +797,13 @@ namespace Bit.Core.Services
             if (!providers?.ContainsKey(type) ?? true)
             {
                 return;
+            }
+
+            // Since the user can no longer directly manipulate U2F tokens, we should
+            // disable them when the user disables WebAuthn.
+            if (type == TwoFactorProviderType.WebAuthn)
+            {
+                providers.Remove(TwoFactorProviderType.U2f);
             }
 
             providers.Remove(type);
@@ -1156,7 +1245,7 @@ namespace Bit.Core.Services
             return IdentityResult.Success;
         }
 
-        public void SetTwoFactorProvider(User user, TwoFactorProviderType type)
+        public void SetTwoFactorProvider(User user, TwoFactorProviderType type, bool setEnabled = true)
         {
             var providers = user.GetTwoFactorProviders();
             if (!providers?.ContainsKey(type) ?? true)
@@ -1164,7 +1253,10 @@ namespace Bit.Core.Services
                 return;
             }
 
-            providers[type].Enabled = true;
+            if (setEnabled)
+            {
+                providers[type].Enabled = true;
+            }
             user.SetTwoFactorProviders(providers);
 
             if (string.IsNullOrWhiteSpace(user.TwoFactorRecoveryCode))

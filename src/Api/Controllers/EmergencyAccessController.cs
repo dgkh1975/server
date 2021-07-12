@@ -5,6 +5,7 @@ using Bit.Core.Exceptions;
 using Bit.Core.Models.Api;
 using Bit.Core.Models.Api.Request;
 using Bit.Core.Models.Api.Response;
+using Bit.Core.Models.Table;
 using Bit.Core.Repositories;
 using Bit.Core.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -60,7 +61,16 @@ namespace Bit.Api.Controllers
             var result = await _emergencyAccessService.GetAsync(new Guid(id), userId.Value);
             return new EmergencyAccessGranteeDetailsResponseModel(result);
         }
-        
+
+        [HttpGet("{id}/policies")]
+        public async Task<ListResponseModel<PolicyResponseModel>> Policies(string id)
+        {
+            var user = await _userService.GetUserByPrincipalAsync(User);
+            var policies = await _emergencyAccessService.GetPoliciesAsync(new Guid(id), user);
+            var responses = policies.Select<Policy, PolicyResponseModel>(policy => new PolicyResponseModel(policy));
+            return new ListResponseModel<PolicyResponseModel>(responses);
+        }
+
         [HttpPut("{id}")]
         [HttpPost("{id}")]
         public async Task Put(string id, [FromBody]EmergencyAccessUpdateRequestModel model)
@@ -152,6 +162,13 @@ namespace Bit.Api.Controllers
         {
             var user = await _userService.GetUserByPrincipalAsync(User);
             return await _emergencyAccessService.ViewAsync(new Guid(id), user);
+        }
+
+        [HttpGet("{id}/{cipherId}/attachment/{attachmentId}")]
+        public async Task<AttachmentResponseModel> GetAttachmentData(string id, string cipherId, string attachmentId)
+        {
+            var user = await _userService.GetUserByPrincipalAsync(User);
+            return await _emergencyAccessService.GetAttachmentDownloadAsync(new Guid(id), cipherId, attachmentId, user);
         }
     }
 }

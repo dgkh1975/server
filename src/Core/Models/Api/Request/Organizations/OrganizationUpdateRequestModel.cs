@@ -1,5 +1,6 @@
 ﻿using Bit.Core.Models.Data;
 using Bit.Core.Models.Table;
+using Bit.Core.Settings;
 using System.ComponentModel.DataAnnotations;
 
 namespace Bit.Core.Models.Api
@@ -15,10 +16,10 @@ namespace Bit.Core.Models.Api
         public string Identifier { get; set; }
         [EmailAddress]
         [Required]
-        [StringLength(50)]
+        [StringLength(256)]
         public string BillingEmail { get; set; }
-
         public Permissions Permissions { get; set; }
+        public OrganizationKeysRequestModel Keys { get; set; }
 
         public virtual Organization ToOrganization(Organization existingOrganization, GlobalSettings globalSettings)
         {
@@ -30,6 +31,7 @@ namespace Bit.Core.Models.Api
                 existingOrganization.BillingEmail = BillingEmail?.ToLowerInvariant()?.Trim();
             }
             existingOrganization.Identifier = Identifier;
+            Keys?.ToOrganization(existingOrganization);
             return existingOrganization;
         }
     }

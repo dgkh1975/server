@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Bit.Core.Models.Data;
 using Bit.Core.Models.Table;
+using Bit.Core.Settings;
+using Bit.Core.Utilities;
 using Dapper;
 
 namespace Bit.Core.Repositories.SqlServer
@@ -154,6 +156,19 @@ namespace Bit.Core.Repositories.SqlServer
                     $"[{Schema}].[User_UpdateRenewalReminderDate]",
                     new { Id = id, RenewalReminderDate = renewalReminderDate },
                     commandType: CommandType.StoredProcedure);
+            }
+        }
+
+        public async Task<IEnumerable<User>> GetManyAsync(IEnumerable<Guid> ids)
+        {
+            using (var connection = new SqlConnection(ReadOnlyConnectionString))
+            {
+                var results = await connection.QueryAsync<User>(
+                    $"[{Schema}].[{Table}_ReadByIds]",
+                    new { Ids = ids.ToGuidIdArrayTVP() },
+                    commandType: CommandType.StoredProcedure);
+
+                return results.ToList();
             }
         }
     }

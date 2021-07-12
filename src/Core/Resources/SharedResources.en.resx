@@ -585,6 +585,35 @@
     <value>Require users to save vault items to an organization by removing the personal ownership option.</value>
   </data>
   <data name="PersonalOwnershipExemption" xml:space="preserve">
+    <value>Organization users that can manage the organization's policies are exempt from this policy's enforcement.</value>
+  </data>
+  <data name="DisableSend" xml:space="preserve">
+    <value>Disable Send</value>
+    <comment>'Send' is a noun and the name of a feature called 'Bitwarden Send'. It should not be translated.</comment>
+  </data>
+  <data name="DisableSendDescription" xml:space="preserve">
+    <value>Do not allow users to create or edit a Bitwarden Send. Deleting an existing Send is still allowed.</value>
+    <comment>'Send' is a noun and the name of a feature called 'Bitwarden Send'. It should not be translated.</comment>
+  </data>
+  <data name="DisableSendExemption" xml:space="preserve">
+    <value>Organization Owners and Administrators are exempt from this policy's enforcement.</value>
+  </data>
+  <data name="SendOptions" xml:space="preserve">
+    <value>Send Options</value>
+    <comment>'Send' is a noun and the name of a feature called 'Bitwarden Send'. It should not be translated.</comment>
+  </data>
+  <data name="Options" xml:space="preserve">
+    <value>Options</value>
+  </data>
+  <data name="DisableHideEmail" xml:space="preserve">
+    <value>Do not allow users to hide their email address when creating or editing a Send.</value>
+    <comment>'Send' is a noun and the name of a feature called 'Bitwarden Send'. It should not be translated.</comment>
+  </data>
+  <data name="SendOptionsDescription" xml:space="preserve">
+    <value>Set options for creating and editing Sends.</value>
+    <comment>'Send' is a noun and the name of a feature called 'Bitwarden Send'. It should not be translated.</comment>
+  </data>
+  <data name="SendOptionsExemption" xml:space="preserve">
     <value>Organization Owners and Administrators are exempt from this policy's enforcement.</value>
   </data>
   <data name="DisableRequireSsoError" xml:space="preserve">
@@ -592,5 +621,56 @@
   </data>
   <data name="PersonalOwnershipCheckboxDesc" xml:space="preserve">
     <value>Disable personal ownership for organization users</value>
+  </data>
+  <data name="AdditionalScopes" xml:space="preserve">
+    <value>Additional/Custom Scopes (comma delimited)</value>
+  </data>
+  <data name="AdditionalUserIdClaimTypes" xml:space="preserve">
+    <value>Additional/Custom User ID Claim Types (comma delimited)</value>
+  </data>
+  <data name="AdditionalEmailClaimTypes" xml:space="preserve">
+    <value>Additional/Custom Email Claim Types (comma delimited)</value>
+  </data>
+  <data name="AdditionalNameClaimTypes" xml:space="preserve">
+    <value>Additional/Custom Name Claim Types (comma delimited)</value>
+  </data>
+  <data name="AcrValues" xml:space="preserve">
+    <value>Requested Authentication Context Class Reference values (acr_values)</value>
+    <comment>'acr_values' is an explicit OIDC param, see https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest. It should not be translated.</comment>
+  </data>
+  <data name="ExpectedReturnAcrValue" xml:space="preserve">
+    <value>Expected "acr" Claim Value In Response (acr validation)</value>
+    <comment>'acr' is an explicit OIDC claim type, see https://openid.net/specs/openid-connect-core-1_0.html#rfc.section.2 (acr). It should not be translated.</comment>
+  </data>
+  <data name="LoggedOutMessage" xml:space="preserve">
+    <value>You have been logged out of the Bitwarden Business Portal.</value>
+  </data>
+  <data name="AccessDeniedError" xml:space="preserve">
+    <value>Access Denied to this resource.</value>
+  </data>
+  <data name="AcrMissingOrInvalid" xml:space="preserve">
+    <value>Expected authentication context class reference (acr) was not returned with the authentication response or is invalid.</value>
+    <comment>'acr' is an explicit OIDC claim type, see https://openid.net/specs/openid-connect-core-1_0.html#rfc.section.2 (acr). It should not be translated.</comment>
+  </data>
+  <data name="ResetPassword" xml:space="preserve">
+    <value>Master Password Reset</value>
+  </data>
+  <data name="ResetPasswordDescription" xml:space="preserve">
+    <value>Allow administrators in the organization to reset organization users' master password.</value>
+  </data>
+  <data name="ResetPasswordWarning" xml:space="preserve">
+    <value>Users in the organization will need to self-enroll or be auto-enrolled before administrators can reset their master password.</value>
+  </data>
+  <data name="ResetPasswordAutoEnroll" xml:space="preserve">
+    <value>Automatic Enrollment</value>
+  </data>
+  <data name="ResetPasswordAutoEnrollDescription" xml:space="preserve">
+    <value>All users will be automatically enrolled in password reset once their invite is accepted and will not be allowed to withdraw.</value>
+  </data>
+  <data name="ResetPasswordAutoEnrollWarning" xml:space="preserve">
+    <value>Users already in the organization will not be retroactively enrolled in password reset. They will need to self-enroll before administrators can reset their master password.</value>
+  </data>
+  <data name="ResetPasswordAutoEnrollCheckbox" xml:space="preserve">
+    <value>Require new users to be enrolled automatically</value>
   </data>
 </root>

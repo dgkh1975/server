@@ -20,6 +20,10 @@ namespace Bit.Core.Models.Api.Public
         /// </summary>
         [Required]
         public bool? OverwriteExisting { get; set; }
+        /// <summary>
+        /// Indicates an import of over 2000 users and/or groups is expected
+        /// </summary>
+        public bool LargeImport { get; set; } = false;
 
         public class OrganizationImportGroupRequestModel
         {
@@ -66,7 +70,7 @@ namespace Bit.Core.Models.Api.Public
             /// </summary>
             /// <example>jsmith@example.com</example>
             [EmailAddress]
-            [StringLength(50)]
+            [StringLength(256)]
             public string Email { get; set; }
             /// <summary>
             /// External identifier for reference or linking this member to another system, such as a user directory.

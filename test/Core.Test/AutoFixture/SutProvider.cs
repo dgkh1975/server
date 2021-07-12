@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AutoFixture;
 using AutoFixture.Kernel;
 using System.Reflection;
 using System.Linq;
+using Bit.Core.Test.AutoFixture.GlobalSettingsFixtures;
 
 namespace Bit.Core.Test.AutoFixture
 {
@@ -16,10 +17,12 @@ namespace Bit.Core.Test.AutoFixture
         public TSut Sut { get; private set; }
         public Type SutType => typeof(TSut);
 
-        public SutProvider()
+        public SutProvider() : this(new Fixture()) { }
+
+        public SutProvider(IFixture fixture)
         {
             _dependencies = new Dictionary<Type, Dictionary<string, object>>();
-            _fixture = new Fixture().WithAutoNSubstitutions();
+            _fixture = (fixture ?? new Fixture()).WithAutoNSubstitutions().Customize(new GlobalSettings());
             _constructorParameterRelay = new ConstructorParameterRelay<TSut>(this, _fixture);
             _fixture.Customizations.Add(_constructorParameterRelay);
         }

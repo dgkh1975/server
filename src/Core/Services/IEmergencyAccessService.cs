@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Bit.Core.Enums;
+using Bit.Core.Models.Api;
 using Bit.Core.Models.Api.Response;
 using Bit.Core.Models.Data;
 using Bit.Core.Models.Table;
@@ -19,10 +21,12 @@ namespace Bit.Core.Services
         Task InitiateAsync(Guid id, User initiatingUser);
         Task ApproveAsync(Guid id, User approvingUser);
         Task RejectAsync(Guid id, User rejectingUser);
+        Task<ICollection<Policy>> GetPoliciesAsync(Guid id, User requestingUser);
         Task<(EmergencyAccess, User)> TakeoverAsync(Guid id, User initiatingUser);
         Task PasswordAsync(Guid id, User user, string newMasterPasswordHash, string key);
         Task SendNotificationsAsync();
         Task HandleTimedOutRequestsAsync();
         Task<EmergencyAccessViewResponseModel> ViewAsync(Guid id, User user);
+        Task<AttachmentResponseModel> GetAttachmentDownloadAsync(Guid id, string cipherId, string attachmentId, User user);
     }
 }

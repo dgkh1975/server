@@ -8,5 +8,8 @@
         SingleOrg = 3,
         RequireSso = 4,
         PersonalOwnership = 5,
+        DisableSend = 6,
+        SendOptions = 7,
+        ResetPassword = 8,
     }
 }

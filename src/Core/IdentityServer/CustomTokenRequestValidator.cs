@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Bit.Core.Services;
+using Bit.Core.Settings;
+using Bit.Core.Context;
 using System.Linq;
 using Bit.Core.Identity;
 using Microsoft.Extensions.Logging;
@@ -31,7 +33,7 @@ namespace Bit.Core.IdentityServer
             IApplicationCacheService applicationCacheService,
             IMailService mailService,
             ILogger<ResourceOwnerPasswordValidator> logger,
-            CurrentContext currentContext,
+            ICurrentContext currentContext,
             GlobalSettings globalSettings,
             IPolicyRepository policyRepository)
             : base(userManager, deviceRepository, deviceService, userService, eventService,
@@ -85,7 +87,13 @@ namespace Bit.Core.IdentityServer
         }
 
         protected override void SetSsoResult(CustomTokenRequestValidationContext context, 
-            Dictionary<string, object> customResponse) => throw new System.NotImplementedException();
+            Dictionary<string, object> customResponse) 
+        {
+            context.Result.Error = "invalid_grant";
+            context.Result.ErrorDescription = "Single Sign on required.";
+            context.Result.IsError = true;
+            context.Result.CustomResponse = customResponse;
+        }
 
         protected override void SetErrorResult(CustomTokenRequestValidationContext context,
             Dictionary<string, object> customResponse)

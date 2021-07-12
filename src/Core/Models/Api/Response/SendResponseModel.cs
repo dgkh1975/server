@@ -3,6 +3,7 @@ using Bit.Core.Enums;
 using Bit.Core.Models.Data;
 using Bit.Core.Models.Table;
 using Bit.Core.Utilities;
+using Bit.Core.Settings;
 using Newtonsoft.Json;
 
 namespace Bit.Core.Models.Api
@@ -28,6 +29,7 @@ namespace Bit.Core.Models.Api
             DeletionDate = send.DeletionDate;
             Password = send.Password;
             Disabled = send.Disabled;
+            HideEmail = send.HideEmail.GetValueOrDefault();
 
             SendData sendData;
             switch (send.Type)
@@ -65,5 +67,6 @@ namespace Bit.Core.Models.Api
         public DateTime RevisionDate { get; set; }
         public DateTime? ExpirationDate { get; set; }
         public DateTime DeletionDate { get; set; }
+        public bool HideEmail { get; set; }
     }
 }

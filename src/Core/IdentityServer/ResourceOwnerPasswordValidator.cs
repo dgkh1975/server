@@ -8,6 +8,8 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Bit.Core.Services;
 using Bit.Core.Identity;
+using Bit.Core.Context;
+using Bit.Core.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace Bit.Core.IdentityServer
@@ -17,6 +19,8 @@ namespace Bit.Core.IdentityServer
     {
         private UserManager<User> _userManager;
         private readonly IUserService _userService;
+        private readonly ICurrentContext _currentContext;
+        private readonly ICaptchaValidationService _captchaValidationService;
 
         public ResourceOwnerPasswordValidator(
             UserManager<User> userManager,
@@ -30,19 +34,50 @@ namespace Bit.Core.IdentityServer
             IApplicationCacheService applicationCacheService,
             IMailService mailService,
             ILogger<ResourceOwnerPasswordValidator> logger,
-            CurrentContext currentContext,
+            ICurrentContext currentContext,
             GlobalSettings globalSettings,
-            IPolicyRepository policyRepository)
+            IPolicyRepository policyRepository,
+            ICaptchaValidationService captchaValidationService)
             : base(userManager, deviceRepository, deviceService, userService, eventService,
                   organizationDuoWebTokenProvider, organizationRepository, organizationUserRepository,
                   applicationCacheService, mailService, logger, currentContext, globalSettings, policyRepository)
         {
             _userManager = userManager;
             _userService = userService;
+            _currentContext = currentContext;
+            _captchaValidationService = captchaValidationService;
         }
 
         public async Task ValidateAsync(ResourceOwnerPasswordValidationContext context)
         {
+            // Uncomment whenever we want to require the `auth-email` header
+            //
+            //if (!_currentContext.HttpContext.Request.Headers.ContainsKey("Auth-Email") ||
+            //    _currentContext.HttpContext.Request.Headers["Auth-Email"] != context.UserName)
+            //{
+            //    context.Result = new GrantValidationResult(TokenRequestErrors.InvalidGrant,
+            //        "Auth-Email header invalid.");
+            //    return;
+            //}
+
+            if (_captchaValidationService.ServiceEnabled && _currentContext.IsBot)
+            {
+                var captchaResponse = context.Request.Raw["CaptchaResponse"]?.ToString();
+                if (string.IsNullOrWhiteSpace(captchaResponse))
+                {
+                    context.Result = new GrantValidationResult(TokenRequestErrors.InvalidGrant, "Captcha required.");
+                    return;
+                }
+
+                var captchaValid = await _captchaValidationService.ValidateCaptchaResponseAsync(captchaResponse,
+                    _currentContext.IpAddress);
+                if (!captchaValid)
+                {
+                    await BuildErrorResultAsync("Captcha is invalid.", false, context, null);
+                    return;
+                }
+            }
+
             await ValidateAsync(context, context.Request);
         }
 

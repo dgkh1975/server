@@ -9,6 +9,8 @@ using IdentityModel;
 using Bit.Core.Utilities;
 using System.Security.Claims;
 using Bit.Core.Services;
+using Bit.Core.Settings;
+using Bit.Core.Context;
 using System.Collections.ObjectModel;
 
 namespace Bit.Core.IdentityServer
@@ -21,8 +23,10 @@ namespace Bit.Core.IdentityServer
         private readonly GlobalSettings _globalSettings;
         private readonly StaticClientStore _staticClientStore;
         private readonly ILicensingService _licensingService;
-        private readonly CurrentContext _currentContext;
+        private readonly ICurrentContext _currentContext;
         private readonly IOrganizationUserRepository _organizationUserRepository;
+        private readonly IProviderUserRepository _providerUserRepository;
+        private readonly IProviderOrganizationRepository _providerOrganizationRepository;
 
         public ClientStore(
             IInstallationRepository installationRepository,
@@ -31,8 +35,10 @@ namespace Bit.Core.IdentityServer
             GlobalSettings globalSettings,
             StaticClientStore staticClientStore,
             ILicensingService licensingService,
-            CurrentContext currentContext,
-            IOrganizationUserRepository organizationUserRepository)
+            ICurrentContext currentContext,
+            IOrganizationUserRepository organizationUserRepository,
+            IProviderUserRepository providerUserRepository,
+            IProviderOrganizationRepository providerOrganizationRepository)
         {
             _installationRepository = installationRepository;
             _organizationRepository = organizationRepository;
@@ -42,6 +48,8 @@ namespace Bit.Core.IdentityServer
             _licensingService = licensingService; 
             _currentContext = currentContext;
             _organizationUserRepository = organizationUserRepository;
+            _providerUserRepository = providerUserRepository;
+            _providerOrganizationRepository = providerOrganizationRepository;
         }
 
         public async Task<Client> FindClientByIdAsync(string clientId)
@@ -136,8 +144,9 @@ namespace Bit.Core.IdentityServer
                             new ClientClaim(JwtClaimTypes.AuthenticationMethod, "Application", "external")
                         }; 
                         var orgs = await _currentContext.OrganizationMembershipAsync(_organizationUserRepository, user.Id);
+                        var providers = await _currentContext.ProviderMembershipAsync(_providerUserRepository, user.Id);
                         var isPremium = await _licensingService.ValidateUserPremiumAsync(user);
-                        foreach (var claim in CoreHelpers.BuildIdentityClaims(user, orgs, isPremium))
+                        foreach (var claim in CoreHelpers.BuildIdentityClaims(user, orgs, providers, isPremium))
                         {
                             var upperValue = claim.Value.ToUpperInvariant();
                             var isBool = upperValue == "TRUE" || upperValue == "FALSE";

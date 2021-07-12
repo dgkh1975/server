@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Bit.Core.Enums;
 using Bit.Core.Models.Table;
+using Bit.Core.Models.Data;
 using Bit.Core.Services;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
@@ -45,6 +46,13 @@ namespace Bit.Portal.Models
                     case PolicyType.PasswordGenerator:
                         PasswordGeneratorDataModel = JsonSerializer.Deserialize<PasswordGeneratorDataModel>(model.Data, options);
                         break;
+                    case PolicyType.SendOptions:
+                        SendOptionsDataModel = JsonSerializer.Deserialize<SendOptionsPolicyData>(model.Data, options);
+                        break;
+                    case PolicyType.ResetPassword:
+                        ResetPasswordDataModel =
+                            JsonSerializer.Deserialize<ResetPasswordDataModel>(model.Data, options);
+                        break;
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -53,6 +61,8 @@ namespace Bit.Portal.Models
 
         public MasterPasswordDataModel MasterPasswordDataModel { get; set; }
         public PasswordGeneratorDataModel PasswordGeneratorDataModel { get; set; }
+        public SendOptionsPolicyData SendOptionsDataModel { get; set; }
+        public ResetPasswordDataModel ResetPasswordDataModel { get; set; }
         public List<SelectListItem> Complexities { get; set; }
         public List<SelectListItem> DefaultTypes { get; set; }
         public string EnableCheckboxText { get; set; }
@@ -82,10 +92,17 @@ namespace Bit.Portal.Models
                 case PolicyType.PasswordGenerator:
                     existingPolicy.Data = JsonSerializer.Serialize(PasswordGeneratorDataModel, options);
                     break;
+                case PolicyType.SendOptions:
+                    existingPolicy.Data = JsonSerializer.Serialize(SendOptionsDataModel, options);
+                    break;
+                case PolicyType.ResetPassword:
+                    existingPolicy.Data = JsonSerializer.Serialize(ResetPasswordDataModel, options);
+                    break;
                 case PolicyType.SingleOrg: 
                 case PolicyType.TwoFactorAuthentication:
                 case PolicyType.RequireSso:
                 case PolicyType.PersonalOwnership:
+                case PolicyType.DisableSend:
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();

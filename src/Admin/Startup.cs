@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Globalization;
-using Bit.Core;
+using Bit.Core.Context;
 using Bit.Core.Identity;
+using Bit.Core.Settings;
 using Bit.Core.Utilities;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -11,6 +12,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Stripe;
+
+#if !OSS
+using Bit.CommCore.Utilities;
+#endif
 
 namespace Bit.Admin
 {
@@ -45,7 +50,7 @@ namespace Bit.Admin
             services.AddSqlServerRepositories(globalSettings);
 
             // Context
-            services.AddScoped<CurrentContext>();
+            services.AddScoped<ICurrentContext, CurrentContext>();
 
             // Identity
             services.AddPasswordlessIdentityServices<ReadOnlyEnvIdentityUserStore>(globalSettings);
@@ -64,6 +69,12 @@ namespace Bit.Admin
             // Services
             services.AddBaseServices();
             services.AddDefaultServices(globalSettings);
+            
+            #if OSS
+                services.AddOosServices();
+            #else
+                services.AddCommCoreServices();
+            #endif
 
             // Mvc
             services.AddMvc(config =>
@@ -88,6 +99,10 @@ namespace Bit.Admin
                 else if (CoreHelpers.SettingHasValue(globalSettings.Amazon?.AccessKeySecret))
                 {
                     services.AddHostedService<HostedServices.AmazonSqsBlockIpHostedService>();
+                }
+                if (CoreHelpers.SettingHasValue(globalSettings.Mail.ConnectionString))
+                {
+                    services.AddHostedService<HostedServices.AzureQueueMailHostedService>();
                 }
             }
         }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Bit.Core.Models.Mail;
+using Bit.Core.Settings;
 using System.Linq;
 using Amazon.SimpleEmail;
 using Amazon;
@@ -58,7 +59,7 @@ namespace Bit.Core.Services
             _logger = logger;
             _client = amazonSimpleEmailService;
             _source = $"\"{globalSettings.SiteName}\" <{globalSettings.Mail.ReplyToEmail}>";
-            _senderTag = $"Server_{globalSettings.ProjectName}";
+            _senderTag = $"Server_{globalSettings.ProjectName?.Replace(' ', '_')}";
             if (!string.IsNullOrWhiteSpace(_globalSettings.Mail.AmazonConfigSetName))
             {
                 _configSetName = _globalSettings.Mail.AmazonConfigSetName;
@@ -120,7 +121,7 @@ namespace Bit.Core.Services
             }
             catch (Exception e)
             {
-                _logger.LogWarning(e, "Failed to send email. Re-retying...");
+                _logger.LogWarning(e, "Failed to send email. Retrying...");
                 await SendAsync(request, true);
                 throw e;
             }

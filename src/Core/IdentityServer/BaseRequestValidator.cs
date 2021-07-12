@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Bit.Core.Services;
 using System.Linq;
@@ -17,6 +18,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Bit.Core.Models.Api;
+using Bit.Core.Context;
+using Bit.Core.Settings;
 
 namespace Bit.Core.IdentityServer
 {
@@ -33,7 +36,7 @@ namespace Bit.Core.IdentityServer
         private readonly IApplicationCacheService _applicationCacheService;
         private readonly IMailService _mailService;
         private readonly ILogger<ResourceOwnerPasswordValidator> _logger;
-        private readonly CurrentContext _currentContext;
+        private readonly ICurrentContext _currentContext;
         private readonly GlobalSettings _globalSettings;
         private readonly IPolicyRepository _policyRepository;
 
@@ -49,7 +52,7 @@ namespace Bit.Core.IdentityServer
             IApplicationCacheService applicationCacheService,
             IMailService mailService,
             ILogger<ResourceOwnerPasswordValidator> logger,
-            CurrentContext currentContext,
+            ICurrentContext currentContext,
             GlobalSettings globalSettings,
             IPolicyRepository policyRepository)
         {
@@ -84,7 +87,7 @@ namespace Bit.Core.IdentityServer
                 return;
             }
 
-            var twoFactorRequirement = await RequiresTwoFactorAsync(user);
+            var twoFactorRequirement = await RequiresTwoFactorAsync(user, request.GrantType);
             if (twoFactorRequirement.Item1)
             {
                 // Just defaulting it
@@ -257,8 +260,14 @@ namespace Bit.Core.IdentityServer
 
         protected abstract void SetErrorResult(T context, Dictionary<string, object> customResponse);
 
-        private async Task<Tuple<bool, Organization>> RequiresTwoFactorAsync(User user)
+        private async Task<Tuple<bool, Organization>> RequiresTwoFactorAsync(User user, string grantType)
         {
+            if (grantType == "client_credentials")
+            {
+                // Do not require MFA for api key logins
+                return new Tuple<bool, Organization>(false, null);
+            }
+
             var individualRequired = _userManager.SupportsUserTwoFactor &&
                 await _userManager.GetTwoFactorEnabledAsync(user) &&
                 (await _userManager.GetValidTwoFactorProvidersAsync(user)).Count > 0;
@@ -283,9 +292,10 @@ namespace Bit.Core.IdentityServer
 
         private async Task<bool> IsValidAuthTypeAsync(User user, string grantType)
         {
-            if (grantType == "authorization_code")
+            if (grantType == "authorization_code" || grantType == "client_credentials")
             {
                 // Already using SSO to authorize, finish successfully
+                // Or login via api key, skip SSO requirement
                 return true;
             }
 
@@ -365,6 +375,7 @@ namespace Bit.Core.IdentityServer
                 case TwoFactorProviderType.Duo:
                 case TwoFactorProviderType.YubiKey:
                 case TwoFactorProviderType.U2f:
+                case TwoFactorProviderType.WebAuthn:
                 case TwoFactorProviderType.Remember:
                     if (type != TwoFactorProviderType.Remember &&
                         !(await _userService.TwoFactorProviderIsEnabledAsync(type, user)))
@@ -392,6 +403,7 @@ namespace Bit.Core.IdentityServer
             {
                 case TwoFactorProviderType.Duo:
                 case TwoFactorProviderType.U2f:
+                case TwoFactorProviderType.WebAuthn:
                 case TwoFactorProviderType.Email:
                 case TwoFactorProviderType.YubiKey:
                     if (!(await _userService.TwoFactorProviderIsEnabledAsync(type, user)))
@@ -418,6 +430,15 @@ namespace Bit.Core.IdentityServer
                             ["Challenge"] = tokens != null && tokens.Length > 0 ? tokens[0] : null,
                             ["Challenges"] = tokens != null && tokens.Length > 1 ? tokens[1] : null
                         };
+                    }
+                    else if (type == TwoFactorProviderType.WebAuthn)
+                    {
+                        if (token == null)
+                        {
+                            return null;
+                        }
+
+                        return JsonSerializer.Deserialize<Dictionary<string, object>>(token);
                     }
                     else if (type == TwoFactorProviderType.Email)
                     {

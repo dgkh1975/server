@@ -75,6 +75,10 @@ namespace Bit.Setup
             {
                 _context.Install.Domain = _context.Parameters["domain"].ToLowerInvariant();
             }
+            if (_context.Parameters.ContainsKey("dbname"))
+            {
+                _context.Install.Database = _context.Parameters["dbname"];
+            }
 
             if (_context.Stub)
             {
@@ -101,6 +105,9 @@ namespace Bit.Setup
 
             var appIdBuilder = new AppIdBuilder(_context);
             appIdBuilder.Build();
+
+            var assetLinksBuilder = new AssetLinksBuilder(_context);
+            assetLinksBuilder.Build();
 
             var dockerComposeBuilder = new DockerComposeBuilder(_context);
             dockerComposeBuilder.BuildForInstaller();
@@ -196,15 +203,35 @@ namespace Bit.Setup
 
         private static bool ValidateInstallation()
         {
-            var installationId = Helpers.ReadInput("Enter your installation id (get at https://bitwarden.com/host)");
+            var installationId = string.Empty;
+            var installationKey = string.Empty;
+
+            if (_context.Parameters.ContainsKey("install-id"))
+            {
+                installationId = _context.Parameters["install-id"].ToLowerInvariant();
+            }
+            else
+            {
+                installationId = Helpers.ReadInput("Enter your installation id (get at https://bitwarden.com/host)");
+            }
+
             if (!Guid.TryParse(installationId.Trim(), out var installationidGuid))
             {
                 Console.WriteLine("Invalid installation id.");
                 return false;
             }
 
+            if (_context.Parameters.ContainsKey("install-key"))
+            {
+                installationKey = _context.Parameters["install-key"];
+            }
+            else
+            {
+                installationKey = Helpers.ReadInput("Enter your installation key");
+            }
+
             _context.Install.InstallationId = installationidGuid;
-            _context.Install.InstallationKey = Helpers.ReadInput("Enter your installation key");
+            _context.Install.InstallationKey = installationKey;
 
             try
             {
@@ -254,6 +281,9 @@ namespace Bit.Setup
 
             var appIdBuilder = new AppIdBuilder(_context);
             appIdBuilder.Build();
+
+            var assetLinksBuilder = new AssetLinksBuilder(_context);
+            assetLinksBuilder.Build();
 
             var dockerComposeBuilder = new DockerComposeBuilder(_context);
             dockerComposeBuilder.BuildForUpdater();

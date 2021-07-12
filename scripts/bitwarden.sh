@@ -32,8 +32,10 @@ fi
 
 SCRIPTS_DIR="$OUTPUT/scripts"
 GITHUB_BASE_URL="https://raw.githubusercontent.com/bitwarden/server/master"
-COREVERSION="1.39.3"
-WEBVERSION="2.18.1"
+
+# Please do not create pull requests modifying the version numbers.
+COREVERSION="1.41.5"
+WEBVERSION="2.21.1"
 
 echo "bitwarden.sh version $COREVERSION"
 docker --version
@@ -96,7 +98,7 @@ renewcert
 rebuild
 help
 
-See more at https://help.bitwarden.com/article/install-on-premise/#script-commands
+See more at https://bitwarden.com/help/article/install-on-premise/#script-commands-reference
 
 EOT
 }
@@ -135,7 +137,7 @@ case $1 in
         checkOutputDirExists
         $SCRIPTS_DIR/run.sh stop $OUTPUT $COREVERSION $WEBVERSION
         ;;
-    "renewcrt")
+    "renewcert")
         checkOutputDirExists
         $SCRIPTS_DIR/run.sh renewcert $OUTPUT $COREVERSION $WEBVERSION
         ;;

@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using Bit.Core;
 using Bit.Core.Business.Sso;
 using Bit.Core.IdentityServer;
 using Bit.Core.Utilities;
+using Bit.Core.Settings;
 using Bit.Sso.Models;
 using IdentityServer4.Models;
 using IdentityServer4.ResponseHandling;
@@ -62,6 +62,7 @@ namespace Bit.Sso.Utilities
                         options.UserInteraction.ErrorUrl = "/Error";
                         options.UserInteraction.ErrorIdParameter = "errorId";
                     }
+                    options.InputLengthRestrictions.UserName = 256;
                 })
                 .AddInMemoryCaching()
                 .AddInMemoryClients(new List<Client>
